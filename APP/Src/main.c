@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "oled.h" 
+#include "usbd_cdc_if.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -54,6 +55,47 @@ uint32_t JumpAddress;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
+
+uint8_t jumpflag = 0;
+
+void USB_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  HAL_Delay(10);
+}
+
+void ProcessReceivedData(uint8_t* data, uint32_t len)
+{
+  // 将接收到的数据转换为字符串
+  data[256] = '\0'; // 确保字符串以 null 结尾
+
+  // 检查接收到的消息是否为 "jump"
+  if (strncmp((char*)data, "jump", len) == 0) {
+      jumpflag = 1; // 设置跳转标志
+  } else {
+    // 在消息前面加上 "APP: "
+    char message[256]; // 预留空间给前缀
+    snprintf(message, sizeof(message), "APP: %s\r\n", data);
+
+    // 通过 USB CDC 发送回去
+    CDC_Transmit_FS((uint8_t *)message, strlen(message));
+  }
+}
+
 void JumpTo(uint32_t address)
 {
   if (((*(__IO uint32_t*)address) & 0x2FFE0000 ) == 0x20000000)
@@ -97,7 +139,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  USB_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
@@ -115,15 +157,14 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    for(int i=0;i<10;i++)
-		{
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_8);
     HAL_Delay(100);
-    }
 		// OLED_Clear();
     // OLED_ShowString(0,0,"Appppppppppp");
-    HAL_Delay(3000);
-    JumpTo(ApplicationAddress);
+    if (jumpflag == 1)
+    {
+      JumpTo(ApplicationAddress);
+    }
   }
   /* USER CODE END 3 */
 }

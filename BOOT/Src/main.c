@@ -23,6 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usbd_cdc_if.h"
 #include "oled.h"
 /* USER CODE END Includes */
 
@@ -51,6 +52,33 @@
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
 
+void USB_Init(void)
+{
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+  /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11|GPIO_PIN_12, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  HAL_Delay(10);
+}
+
+void ProcessReceivedData(uint8_t* data, uint32_t len)
+{
+  char message[256]; // 预留空间给前缀
+  snprintf(message, sizeof(message), "BOOT: %s\r\n", data);
+  // 通过 USB CDC 发送回去
+  CDC_Transmit_FS((uint8_t *)message, strlen(message));
+}
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -81,7 +109,7 @@ int main(void)
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-
+  //USB_Init();
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
