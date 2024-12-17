@@ -30,10 +30,30 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+/* Flash 总大小和基地址 */
+#define FLASH_BASE_ADDR       0x08000000    // Flash 起始地址
+#define FLASH_TOTAL_SIZE      0x00100000    // 1MB 总大小
+
+/* 每个部分的大小 */
+#define FLASH_SIZE_APP0       0x00040000    // app0 大小：256KB (1MB / 4)
+#define FLASH_SIZE_APP_BUF    0x00040000    // app_buf 大小：256KB
+#define FLASH_SIZE_USER_VAR   0x00020000    // 用户变量大小：128KB (1MB / 8)
+#define FLASH_SIZE_BOOTLOADER 0x00020000    // bootloader 大小：128KB
+#define FLASH_SIZE_APP_INIT   0x00040000    // app_init 大小：256KB
+
+/* 每个部分的起始地址 */
+#define FLASH_ADDR_APP0       0x08000000    // app0 起始地址
+#define FLASH_ADDR_APP_BUF    0x08040000    // app_buf 起始地址 (app0 起始地址 + 256KB)
+#define FLASH_ADDR_USER_VAR   0x08080000    // 用户变量起始地址 (app_buf 起始地址 + 256KB)
+#define FLASH_ADDR_BOOTLOADER 0x080A0000    // bootloader 起始地址 (用户变量起始地址 + 128KB)
+#define FLASH_ADDR_APP_INIT   0x080C0000    // app_init 起始地址 (bootloader 起始地址 + 128KB)
+
+
 #define ApplicationAddress     0x08004000
 typedef  void (*pFunction)(void);
 pFunction Jump_To_Application;
 uint32_t JumpAddress;
+extern USBD_HandleTypeDef hUsbDeviceFS;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -58,6 +78,19 @@ void SystemClock_Config(void);
 
 uint8_t jumpflag = 0;
 
+void USB_DeInit(void)
+{
+  if (USBD_Stop(&hUsbDeviceFS) != USBD_OK) 
+  {
+    Error_Handler();
+  }
+  if (USBD_DeInit(&hUsbDeviceFS) != USBD_OK) 
+  {
+    Error_Handler();
+  }
+  HAL_Delay(100);
+}
+
 void USB_Init(void)
 {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -70,12 +103,13 @@ void USB_Init(void)
 
   /*Configure GPIO pin : PA8 */
   GPIO_InitStruct.Pin = GPIO_PIN_11|GPIO_PIN_12;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  HAL_Delay(10);
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11 | GPIO_PIN_12, GPIO_PIN_RESET);
+  HAL_Delay(50);
 }
 
 void ProcessReceivedData(uint8_t* data, uint32_t len)
@@ -99,9 +133,10 @@ void ProcessReceivedData(uint8_t* data, uint32_t len)
 void JumpTo(uint32_t address)
 {
   if (((*(__IO uint32_t*)address) & 0x2FFE0000 ) == 0x20000000)
-  { 
+  {
+    USB_DeInit();
     /* Jump to user application */
-		SCB->VTOR = 0x4000;
+		SCB->VTOR = 0x000A0000;
     JumpAddress = *(__IO uint32_t*) (address + 4);
     Jump_To_Application = (pFunction) JumpAddress;
     /* Initialize user application's Stack Pointer */
@@ -155,15 +190,12 @@ int main(void)
   while (1)
   {
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
 		HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_8);
     HAL_Delay(100);
-		// OLED_Clear();
-    // OLED_ShowString(0,0,"Appppppppppp");
     if (jumpflag == 1)
     {
-      JumpTo(ApplicationAddress);
+      JumpTo(FLASH_ADDR_BOOTLOADER);
     }
   }
   /* USER CODE END 3 */
